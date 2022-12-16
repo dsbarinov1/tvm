@@ -1061,6 +1061,7 @@ IRModule VMCompiler::OptimizeModuleImpl(IRModule mod) {
   pass_seqs.push_back(transform::PlanDevices(config_));
 
   pass_seqs.push_back(transform::FuseOps());
+  pass_seqs.push_back(transform::AnnotateMemoryScope());
 
   // Do layout rewrite for auto-scheduler.
   transform::PassContext pass_ctx = PassContext::Current();
