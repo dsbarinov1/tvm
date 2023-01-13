@@ -253,7 +253,7 @@ class OpenCLWorkspace : public DeviceAPI {
   // Initialize the device.
   void Init(const std::string& type_key, const std::string& device_type,
             const std::string& platform_name = "");
-  virtual void Init() { Init("opencl", "gpu"); }
+  virtual void Init() { Init("opencl", "gpu", "NVIDIA CUDA"); }
   // Check whether the context is OpenCL or not.
   virtual bool IsOpenCLDevice(Device dev) { return dev.device_type == kDLOpenCL; }
   // get the queue of the device

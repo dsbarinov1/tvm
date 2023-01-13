@@ -46,6 +46,28 @@ class NaiveAllocator final : public Allocator {
     return buf;
   }
 
+  Buffer Alloc(int ndims, int64_t* shape, DLDataType type_hint, const std::string& mem_scope) override {
+  if (mem_scope.empty() || mem_scope == "global") {
+        return Allocator::Alloc(device_, ndims, shape, type_hint, mem_scope);
+      }
+
+    size_t nbytes = 1;
+    for (int i = 0; i < ndims; ++i) {
+      nbytes *= static_cast<size_t>(shape[i]);
+    }
+    nbytes *= (type_hint.bits * type_hint.lanes + 7) / 8;
+    Buffer buf;
+    buf.device = device_;
+    buf.size = nbytes;
+    buf.shape = shape;
+    String ms = mem_scope;
+    buf.data = DeviceAPI::Get(device_)->AllocDataSpace(device_, ndims, shape, type_hint, String(mem_scope));
+    // TODO (echuraev): Uncomment these lines
+    //used_memory_.fetch_add(nbytes, std::memory_order_relaxed);
+    //DLOG(INFO) << "allocate " << nbytes << " B, used memory " << used_memory_ << " B";
+    return buf;
+  }
+
   void Free(const Buffer& buffer) override {
     DeviceAPI::Get(device_)->FreeDataSpace(buffer.device, buffer.data);
     used_memory_.fetch_sub(buffer.size, std::memory_order_relaxed);

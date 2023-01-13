@@ -71,6 +71,62 @@ enum class Opcode {
   KillRegister = 20U,
 };
 
+enum class MemScope {
+  Global = 0U,
+  Texture = 1U,
+  TextureWeight = 2U,
+  TextureNHWC = 3U,
+};
+
+static std::string MemScopeToStr(const MemScope& scope) {
+    if (scope == MemScope::Global)
+        return "global";
+    else if (scope == MemScope::Texture)
+        return "global.texture";
+    else if (scope == MemScope::TextureWeight)
+        return "global.texture-weight";
+    else if (scope == MemScope::TextureNHWC)
+        return "global.texture-nhwc";
+    return "";
+}
+
+static int MemScopeToInt(const MemScope& scope) {
+    if (scope == MemScope::Global)
+        return 0;
+    else if (scope == MemScope::Texture)
+        return 1;
+    else if (scope == MemScope::TextureWeight)
+        return 2;
+    else if (scope == MemScope::TextureNHWC)
+        return 3;
+    return -1;
+}
+
+static MemScope StrToMemScope(const std::string& str) {
+    if (str == "global")
+        return MemScope::Global;
+    else if (str == "global.texture")
+        return MemScope::Texture;
+    else if (str == "global.texture-weight")
+        return MemScope::TextureWeight;
+    else if (str == "global.texture-nhwc")
+        return MemScope::TextureNHWC;
+    // TODO: generate exception
+    return MemScope::Global;
+}
+
+static MemScope IdxToMemScope(Index idx) {
+    if (idx == 0)
+        return MemScope::Global;
+    else if (idx == 1)
+        return MemScope::Texture;
+    else if (idx == 2)
+        return MemScope::TextureWeight;
+    else if (idx == 3)
+        return MemScope::TextureNHWC;
+    // TODO: generate exception
+    return MemScope::Global;
+}
 /*! \brief A single virtual machine instruction.
  *
  * The representation of the instruction is as
@@ -157,6 +213,7 @@ struct Instruction {
     struct /* LoadConst Operands */ {
       /* \brief The index into the constant pool. */
       Index const_index;
+      MemScope mem_scope;
     };
     struct /* LoadConsti Operands */ {
       /* \brief The index into the constant pool. */
@@ -203,6 +260,11 @@ struct Instruction {
       DLDataType dtype_hint;
       /*! \brief The index of the device on which the allocation will be made. */
       Index device_index;
+      /*! \brief The number of dimensions. */
+      uint32_t ndim;
+      /*! \brief The shape of tensor. */
+      int64_t* shape;
+      MemScope scope;
     } alloc_storage;
     struct /* ShapeOf Operands */ {
       RegName tensor;
@@ -335,7 +397,7 @@ struct Instruction {
    * \param dst The destination register.
    * \return The load constant instruction.
    */
-  static Instruction LoadConst(Index const_index, RegName dst);
+  static Instruction LoadConst(Index const_index, MemScope scope, RegName dst);
   /*!
    * \brief Construct a load_constanti instruction.
    * \param val The interger constant value.
@@ -360,7 +422,7 @@ struct Instruction {
    * \return The alloc storage instruction.
    */
   static Instruction AllocStorage(RegName size, Index alignment, DLDataType dtype_hint,
-                                  Index device_index, RegName dst);
+                                  Index device_index, uint32_t ndim, const std::vector<int64_t>& shape, MemScope scope, RegName dst);
   /*!
    * \brief Get the shape of an input tensor.
    * \param tensor The input tensor.

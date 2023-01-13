@@ -654,6 +654,17 @@ Expr AnnotateMemoryScopeExpr(const Expr& expr, const IRModule& mod) {
   } else {
     return expr;
   }
+  //if (storage_scope.size()) {
+  //  std::cout << " >>>> BEFORE ANNOTATE: \n"
+  //            << PrettyPrint(expr) << "\n >>>> BEFORE ANNOTATE" << std::endl;
+  //  auto ttt = RewriteVDStorageScopes(storage_scope).Rewrite(expr);
+  //  std::cout << " >>>> AFTER ANNOTATE: \n"
+  //            << PrettyPrint(ttt) << "\n >>>> AFTER ANNOTATE" << std::endl;
+  //  return ttt;
+  //} else {
+  //  std::cout << " >>>> NO ANNOTATE: \n" << PrettyPrint(expr) << "\n >>>> NO ANNOTATE" << std::endl;
+  //  return expr;
+  //}
 }
 
 namespace transform {

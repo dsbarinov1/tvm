@@ -79,7 +79,41 @@ inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev) {
       VLOG(2) << "copying from " << nd_array->device.device_type << "["
               << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
               << "]";
+      std::cout << "copying from " << nd_array->device.device_type << "["
+              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+              << "]" << std::endl;
       return nd_array.CopyTo(dev);
+    }
+    return src;
+  } else {
+    ICHECK(src->IsInstance<ADTObj>())
+        << "VM data must be NDArray or a list of NDArray, but received: " << src->_type_key;
+    std::vector<ObjectRef> ret;
+    ADT adt = Downcast<ADT>(src);
+    for (size_t i = 0; i < adt.size(); i++) {
+      ret.push_back(CopyTo(adt[i], dev));
+    }
+    return ADT(adt->tag, ret.begin(), ret.end());
+  }
+}
+
+inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev, String mem_scope) {
+  if (src->IsInstance<NDArray::ContainerType>()) {
+    auto nd_array = Downcast<NDArray>(src);
+    // TODO(mbs): Should respect device id also.
+    // TODO(vvchernov): it still does not work for different device id
+    // due to simple implementation of Get() and AllocDataSpace() methods
+    // see tvm/src/runtime/c_runtime_api.cc: L139
+    // tvm/src/runtime/cpu_device_api.cc: L47
+    if (nd_array->device.device_type != dev.device_type ||
+        nd_array->device.device_id != dev.device_id) {
+      VLOG(2) << "copying from " << nd_array->device.device_type << "["
+              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+              << "]";
+      std::cout << "copying from " << nd_array->device.device_type << "["
+              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+              << "]" << std::endl;
+      return nd_array.CopyTo(dev, mem_scope);
     }
     return src;
   } else {
@@ -658,8 +692,10 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         }
 
         if (!const_pool_[instr.const_index].defined()) {
+          //Device dev = GetDevice(instr.device_index);
           Device dev = GetDevice(exec_->const_device_indexes[instr.const_index]);
-          const_pool_[instr.const_index] = CopyTo(constant_obj, dev);
+    //std::cout << "runLoop, LoadConst, const_index: " << instr.const_index << ", dev_index: " << dev.device_id << ", instr.dev_index: " << instr.device_index << std::endl;
+          const_pool_[instr.const_index] = CopyTo(constant_obj, dev, MemScopeToStr(instr.mem_scope));
         }
         WriteRegister(instr.dst, const_pool_[instr.const_index]);
         if (is_not_cached) {
@@ -828,8 +864,17 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         VLOG(2) << "allocating with allocation_size=" << size << ", alignment=" << alignment
                 << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
                 << ", device_index=" << instr.alloc_storage.device_index;
+        std::cout << "allocating with allocation_size=" << size << ", alignment=" << alignment
+                << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
+                << ", device_index=" << instr.alloc_storage.device_index
+                << ", ndim: " << instr.alloc_storage.ndim
+                << std::endl;
 
+        if (instr.alloc_storage.ndim > 1) {
+        storage_obj->buffer = allocator->Alloc(instr.alloc_storage.ndim, instr.alloc_storage.shape, instr.alloc_storage.dtype_hint, MemScopeToStr(instr.alloc_storage.scope));
+        } else {
         storage_obj->buffer = allocator->Alloc(size, alignment, instr.alloc_storage.dtype_hint);
+        }
         Storage storage(storage_obj);
         WriteRegister(instr.dst, storage);
         OpStopHook();
