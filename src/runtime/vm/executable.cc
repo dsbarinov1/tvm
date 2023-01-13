@@ -596,7 +596,14 @@ VMInstructionSerializer SerializeInstruction(const Instruction& instr) {
       fields.push_back(dtype.bits);
       fields.push_back(dtype.lanes);
       fields.push_back(instr.alloc_storage.device_index);
+      fields.push_back(instr.alloc_storage.ndim);
+      fields.push_back(MemScopeToInt(instr.alloc_storage.scope));
       fields.push_back(instr.dst);
+
+      // Save the shape of the tensor.
+      // Note that this field is rotated to the end of the list.
+      fields.insert(fields.end(), instr.alloc_storage.shape,
+                    instr.alloc_storage.shape + instr.alloc_storage.ndim);
       break;
     }
     case Opcode::AllocADT: {
@@ -639,8 +646,8 @@ VMInstructionSerializer SerializeInstruction(const Instruction& instr) {
       break;
     }
     case Opcode::LoadConst: {
-      // Number of fields = 2
-      fields.assign({instr.const_index, instr.dst});
+      // Number of fields = 3
+      fields.assign({instr.const_index, MemScopeToInt(instr.mem_scope), instr.dst});
       break;
     }
     case Opcode::LoadConsti: {
@@ -910,8 +917,8 @@ Instruction DeserializeInstruction(const VMInstructionSerializer& instr) {
       return Instruction::AllocClosure(clo_index, num_freevar, free_vars, dst);
     }
     case Opcode::AllocStorage: {
-      // Number of fields = 7
-      DCHECK_GE(instr.fields.size(), 7U);
+      // Number of fields = 10
+      DCHECK_GE(instr.fields.size(), 10U);
       Index allocation_size = instr.fields[0];
       Index alignment = instr.fields[1];
 
@@ -921,9 +928,13 @@ Instruction DeserializeInstruction(const VMInstructionSerializer& instr) {
       dtype.lanes = instr.fields[4];
 
       Index device_type = instr.fields[5];
-      RegName dst = instr.fields[6];
+      Index ndim = instr.fields[6];
+      MemScope scope = IdxToMemScope(instr.fields[7]);
+      RegName dst = instr.fields[8];
 
-      return Instruction::AllocStorage(allocation_size, alignment, dtype, device_type, dst);
+      std::vector<Index> shape = ExtractFields(instr.fields, 9, ndim);
+
+      return Instruction::AllocStorage(allocation_size, alignment, dtype, device_type, ndim, shape, scope, dst);
     }
     case Opcode::If: {
       // Number of fields = 4
@@ -961,8 +972,8 @@ Instruction DeserializeInstruction(const VMInstructionSerializer& instr) {
     }
     case Opcode::LoadConst: {
       // Number of fields = 2
-      DCHECK_EQ(instr.fields.size(), 2U);
-      return Instruction::LoadConst(instr.fields[0], instr.fields[1]);
+      DCHECK_EQ(instr.fields.size(), 3U);
+      return Instruction::LoadConst(instr.fields[0], IdxToMemScope(instr.fields[1]), instr.fields[2]);
     }
     case Opcode::LoadConsti: {
       // Number of fields = 2
