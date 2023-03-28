@@ -67,13 +67,13 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
         host_virtual_device_(std::move(host_virtual_device)) {}
 
   Function Rewrite(const Function& expr) {
-      std::cout << " Memory Alloc Rewrite BEFORE:" << std::endl;
-      std::cout << PrettyPrint(expr) << std::endl;
-      std::cout << " Memory Alloc Rewrite BEFORE!" << std::endl;
+      //std::cout << " Memory Alloc Rewrite BEFORE:" << std::endl;
+      //std::cout << PrettyPrint(expr) << std::endl;
+      //std::cout << " Memory Alloc Rewrite BEFORE!" << std::endl;
       auto tmp = Downcast<Function>(Mutate(expr));
-      std::cout << " Memory Alloc Rewrite AFTER:" << std::endl;
-      std::cout << PrettyPrint(tmp) << std::endl;
-      std::cout << " Memory Alloc Rewrite AFTER!" << std::endl;
+      //std::cout << " Memory Alloc Rewrite AFTER:" << std::endl;
+      //std::cout << PrettyPrint(tmp) << std::endl;
+      //std::cout << " Memory Alloc Rewrite AFTER!" << std::endl;
       return tmp;
   }
 
@@ -147,9 +147,9 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
     Call call = GetRef<Call>(call_node);
     VLOG(1) << "converting lowered call to DPS:" << std::endl << PrettyPrint(call);
 
-    std::cout << "\n\n Before get vd: \n" << PrettyPrint(call) << "\n" << std::endl;
+    //std::cout << "\n\n Before get vd: \n" << PrettyPrint(call) << "\n" << std::endl;
     VirtualDevice virtual_device = GetVirtualDevice(call);
-    std::cout << "\n\n After get vd: \n" << PrettyPrint(virtual_device) << "\n" << std::endl;
+    //std::cout << "\n\n After get vd: \n" << PrettyPrint(virtual_device) << "\n" << std::endl;
     ICHECK(!virtual_device->IsFullyUnconstrained());
     ICHECK(!scopes_.empty())
         << "Calls out of a let block are not supported, do you forget to transform "
@@ -197,7 +197,7 @@ class DialectRewriter : public transform::DeviceAwareExprMutator {
     // Handle ordinary primitive calls.
     Array<Expr> outputs;
     for (size_t i = 0; i < out_types.size(); ++i) {
-        std::cout << " Before MakeStaticAllocation, vd = " << PrettyPrint(virtual_device) << std::endl;
+        //std::cout << " Before MakeStaticAllocation, vd = " << PrettyPrint(virtual_device) << std::endl;
       outputs.push_back(
           MakeStaticAllocation(&scope, out_types[i], virtual_device, std::to_string(i)));
     }

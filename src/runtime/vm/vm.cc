@@ -79,9 +79,9 @@ inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev) {
       VLOG(2) << "copying from " << nd_array->device.device_type << "["
               << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
               << "]";
-      std::cout << "copying from " << nd_array->device.device_type << "["
-              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
-              << "]" << std::endl;
+      //std::cout << "copying from " << nd_array->device.device_type << "["
+      //        << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+      //        << "]" << std::endl;
       return nd_array.CopyTo(dev);
     }
     return src;
@@ -110,9 +110,9 @@ inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev, String mem_scope) {
       VLOG(2) << "copying from " << nd_array->device.device_type << "["
               << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
               << "]";
-      std::cout << "copying from " << nd_array->device.device_type << "["
-              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
-              << "]" << std::endl;
+      //std::cout << "copying from " << nd_array->device.device_type << "["
+      //        << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+      //        << "]" << std::endl;
       return nd_array.CopyTo(dev, mem_scope);
     }
     return src;
@@ -864,11 +864,11 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         VLOG(2) << "allocating with allocation_size=" << size << ", alignment=" << alignment
                 << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
                 << ", device_index=" << instr.alloc_storage.device_index;
-        std::cout << "allocating with allocation_size=" << size << ", alignment=" << alignment
-                << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
-                << ", device_index=" << instr.alloc_storage.device_index
-                << ", ndim: " << instr.alloc_storage.ndim
-                << std::endl;
+        //std::cout << "allocating with allocation_size=" << size << ", alignment=" << alignment
+        //        << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
+        //        << ", device_index=" << instr.alloc_storage.device_index
+        //        << ", ndim: " << instr.alloc_storage.ndim
+        //        << std::endl;
 
         if (instr.alloc_storage.ndim > 1) {
         storage_obj->buffer = allocator->Alloc(instr.alloc_storage.ndim, instr.alloc_storage.shape, instr.alloc_storage.dtype_hint, MemScopeToStr(instr.alloc_storage.scope));
