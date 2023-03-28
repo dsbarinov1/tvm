@@ -245,7 +245,7 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
 
   VMFunction Compile(const GlobalVar& var, const Function& func) {
     VLOG(1) << "Compiling:" << std::endl << PrettyPrint(func);
-    std::cout << "Compiling:" << std::endl << PrettyPrint(func) << std::endl;
+    //std::cout << "Compiling:" << std::endl << PrettyPrint(func) << std::endl;
     std::vector<Index> param_device_indexes;
     if (IsClosure(func)) {
       // After lifting we'll have functions of the form:
@@ -371,7 +371,7 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
     auto vd = GetVirtualDevice(con);
     Index device_index = GetDeviceIndex(vd);
     //device_index = 3;
-    std::cout << "VisitExpr_(const ConstantNode* const_node), node: " << PrettyPrint(con) << ", dev_index: " << device_index << std::endl;
+    //std::cout << "VisitExpr_(const ConstantNode* const_node), node: " << PrettyPrint(con) << ", dev_index: " << device_index << std::endl;
     VLOG(2) << "constant[" << const_index << "] on device[" << device_index << "]";
     context_->const_device_indexes.push_back(device_index);
     context_->constants.push_back(const_node->data);
