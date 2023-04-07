@@ -948,9 +948,7 @@ void VMCompiler::LowerImpl(IRModule mod) {
   for (const auto& virtual_device : context_.virtual_devices_) {
     ICHECK(!virtual_device->IsFullyUnconstrained());
     ICHECK_GT(virtual_device->device_type(), 0);
-    // TODO(mbs): We forget the memory scope.
-    exec_->virtual_devices.push_back(Device{/*device_type=*/virtual_device->device_type(),
-                                            /*device_id=*/virtual_device->virtual_device_id});
+    exec_->virtual_devices.push_back(virtual_device);
   }
   exec_->host_device_index = kHostDeviceIndex;
 
