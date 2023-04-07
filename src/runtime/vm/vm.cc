@@ -566,7 +566,7 @@ void VirtualMachine::Init(const std::vector<Device>& physical_devices,
   for (size_t device_index = 0; device_index < num_virtual_devices; ++device_index) {
     // We'll retain the legacy behaviour and just match by device type.
     // TODO(mbs): Generalize.
-    DLDeviceType virtual_device_type = exec_->virtual_devices[device_index].device_type;
+    DLDeviceType virtual_device_type = exec_->virtual_devices[device_index]->device_type();
     auto itr = std::find_if(physical_devices.begin(), physical_devices.end(),
                             [virtual_device_type](const Device& physical_device) {
                               return physical_device.device_type == virtual_device_type;
@@ -944,8 +944,9 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         ICHECK_EQ(actual_src_dev.device_type, inst_src_dev.device_type);
         ICHECK_EQ(actual_src_dev.device_id, inst_src_dev.device_id);
         Device dst_dev = GetDevice(instr.device_copy.dst_device_index);
+        auto mem_scope = exec_->virtual_devices[instr.device_copy.dst_device_index]->memory_scope;
 
-        NDArray dst_data = src_data.CopyTo(dst_dev);
+        NDArray dst_data = src_data.CopyTo(dst_dev, mem_scope);
         WriteRegister(instr.dst, dst_data);
         OpStopHook();
         pc_++;
