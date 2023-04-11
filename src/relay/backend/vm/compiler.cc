@@ -617,9 +617,6 @@ class VMFunctionCompiler : DeviceAwareExprFunctor<void(const Expr& n)> {
                    auto alloc_attrs = attrs.as<AllocStorageAttrs>();
                    ICHECK(alloc_attrs != nullptr) << "must be the AllocStorage attrs";
                    auto dtype = alloc_attrs->dtype;
-                   //std::cout << " >>> Compiler, mem_scope = " << alloc_attrs->virtual_device->memory_scope
-                   //    << ", virtual_device: " << PrettyPrint(alloc_attrs->virtual_device)
-                   //    << std::endl;
 
                    Emit(Instruction::AllocStorage(size_register, alignment, dtype,
                                                   GetDeviceIndex(alloc_attrs->virtual_device),
@@ -1113,7 +1110,6 @@ IRModule VMCompiler::OptimizeModuleImpl(IRModule mod) {
   // Since lowered functions are bound in the IRModule, we can now eliminate any unused
   // let-bound functions.
   pass_seqs.push_back(DeadCodeElimination(/*inline_once=*/false));
-  pass_seqs.push_back(transform::AnnotateMemoryScope());
 
   // At this point it's possible to run PlanDevices again to pick up any additional constraints
   // introduced during lowering. However we'll not do this until more testing has been done.
