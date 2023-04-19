@@ -537,7 +537,7 @@ def bind_data_copy(stage, axis_to_vectorize=None):
             stage.vectorize(iax3)
             fused = stage.fuse(ax0, ax1, ax2, oax3)
 
-        ftc = numpy.prod(shape) / 4
+        ftc = numpy.prod(shape) // 4
         div = get_div(ftc, 128)
         block, thread = stage.split(fused, factor=div)
 
@@ -557,7 +557,7 @@ def bind_data_copy(stage, axis_to_vectorize=None):
             ftc = numpy.prod(shape)
             vthread = get_div(ftc, 8)
             fused = stage.fuse(*stage.op.axis)
-            ftc = ftc / vthread
+            ftc = ftc // vthread
             # 1024 is a maximum work group size on the most Adreno GPU
             num_thread = get_div(ftc, 1024 // vthread)
             a, b = stage.split(fused, factor=num_thread)
@@ -581,6 +581,17 @@ def get_texture_storage(shape):
     # define it uniformly for all target devices
     # limit = 16384
     limit = tvm.target.Target.current().attrs["texture_spatial_limit"]
+
+    from tvm.tir import expr
+
+    if (
+        isinstance(shape[0], expr.SizeVar)
+        or isinstance(shape[1], expr.SizeVar)
+        or isinstance(shape[2], expr.SizeVar)
+        or isinstance(shape[3], expr.SizeVar)
+    ):  # any_dim
+        print("Return global")
+        return ""
 
     if shape[0] * shape[1] * shape[2] < limit and shape[3] < limit:
         return "global.texture"
