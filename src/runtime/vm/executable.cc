@@ -597,14 +597,26 @@ VMInstructionSerializer SerializeInstruction(const Instruction& instr) {
       fields.push_back(dtype.bits);
       fields.push_back(dtype.lanes);
       fields.push_back(instr.alloc_storage.device_index);
-      fields.push_back(instr.alloc_storage.ndim);
-      fields.push_back(MemScopeToInt(instr.alloc_storage.scope));
+      fields.push_back(instr.dst);
+      break;
+    }
+    case Opcode::AllocTextureStorage: {
+      fields.push_back(instr.alloc_texture_storage.allocation_size);
+      fields.push_back(instr.alloc_texture_storage.alignment);
+      // Save `DLDataType` and the dst register.
+      const auto& dtype = instr.alloc_texture_storage.dtype_hint;
+      fields.push_back(dtype.code);
+      fields.push_back(dtype.bits);
+      fields.push_back(dtype.lanes);
+      fields.push_back(instr.alloc_texture_storage.device_index);
+      fields.push_back(instr.alloc_texture_storage.ndim);
+      fields.push_back(MemScopeToInt(instr.alloc_texture_storage.scope));
       fields.push_back(instr.dst);
 
       // Save the shape of the tensor.
       // Note that this field is rotated to the end of the list.
-      fields.insert(fields.end(), instr.alloc_storage.shape,
-                    instr.alloc_storage.shape + instr.alloc_storage.ndim);
+      fields.insert(fields.end(), instr.alloc_texture_storage.shape,
+                    instr.alloc_texture_storage.shape + instr.alloc_texture_storage.ndim);
       break;
     }
     case Opcode::AllocADT: {
@@ -919,6 +931,22 @@ Instruction DeserializeInstruction(const VMInstructionSerializer& instr) {
       return Instruction::AllocClosure(clo_index, num_freevar, free_vars, dst);
     }
     case Opcode::AllocStorage: {
+      // Number of fields = 7
+      DCHECK_GE(instr.fields.size(), 7U);
+      Index allocation_size = instr.fields[0];
+      Index alignment = instr.fields[1];
+
+      DLDataType dtype;
+      dtype.code = instr.fields[2];
+      dtype.bits = instr.fields[3];
+      dtype.lanes = instr.fields[4];
+
+      Index device_type = instr.fields[5];
+      RegName dst = instr.fields[6];
+
+      return Instruction::AllocStorage(allocation_size, alignment, dtype, device_type, dst);
+    }
+    case Opcode::AllocTextureStorage: {
       // Number of fields = 10
       DCHECK_GE(instr.fields.size(), 10U);
       Index allocation_size = instr.fields[0];
@@ -936,7 +964,7 @@ Instruction DeserializeInstruction(const VMInstructionSerializer& instr) {
 
       std::vector<Index> shape = ExtractFields(instr.fields, 9, ndim);
 
-      return Instruction::AllocStorage(allocation_size, alignment, dtype, device_type, ndim, shape, scope, dst);
+      return Instruction::AllocTextureStorage(allocation_size, alignment, dtype, device_type, ndim, shape, scope, dst);
     }
     case Opcode::If: {
       // Number of fields = 4

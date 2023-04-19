@@ -69,6 +69,7 @@ enum class Opcode {
   ReshapeTensor = 18U,
   DeviceCopy = 19U,
   KillRegister = 20U,
+  AllocTextureStorage = 21U,
 };
 
 enum class MemScope {
@@ -260,12 +261,22 @@ struct Instruction {
       DLDataType dtype_hint;
       /*! \brief The index of the device on which the allocation will be made. */
       Index device_index;
+    } alloc_storage;
+    struct /* AllocTextureStorage Operands */ {
+      /*! \brief The size of the allocation. */
+      RegName allocation_size;
+      /*! \brief The alignment of the allocation. */
+      Index alignment;
+      /*! \brief The hint of the dtype. */
+      DLDataType dtype_hint;
+      /*! \brief The index of the device on which the allocation will be made. */
+      Index device_index;
       /*! \brief The number of dimensions. */
       uint32_t ndim;
       /*! \brief The shape of tensor. */
       int64_t* shape;
-      MemScope scope;
-    } alloc_storage;
+      MemScope scope; // Probably also can be removed?
+    } alloc_texture_storage;
     struct /* ShapeOf Operands */ {
       RegName tensor;
     } shape_of;
@@ -422,6 +433,17 @@ struct Instruction {
    * \return The alloc storage instruction.
    */
   static Instruction AllocStorage(RegName size, Index alignment, DLDataType dtype_hint,
+                                  Index device_index, RegName dst);
+  /*!
+   * \brief Allocate a storage block.
+   * \param size The size of the allocation.
+   * \param alignment The allocation's alignment.
+   * \param dtype_hint The data type hint for the allocator.
+   * \param device_index The index of the device to allocate on.
+   * \param dst The destination to place the storage.
+   * \return The alloc storage instruction.
+   */
+  static Instruction AllocTextureStorage(RegName size, Index alignment, DLDataType dtype_hint,
                                   Index device_index, uint32_t ndim, const std::vector<int64_t>& shape, MemScope scope, RegName dst);
   /*!
    * \brief Get the shape of an input tensor.
