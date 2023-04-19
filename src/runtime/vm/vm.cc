@@ -870,11 +870,31 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         //        << ", ndim: " << instr.alloc_storage.ndim
         //        << std::endl;
 
-        if (instr.alloc_storage.ndim > 1) {
-        storage_obj->buffer = allocator->Alloc(instr.alloc_storage.ndim, instr.alloc_storage.shape, instr.alloc_storage.dtype_hint, MemScopeToStr(instr.alloc_storage.scope));
-        } else {
         storage_obj->buffer = allocator->Alloc(size, alignment, instr.alloc_storage.dtype_hint);
-        }
+        Storage storage(storage_obj);
+        WriteRegister(instr.dst, storage);
+        OpStopHook();
+        pc_++;
+        goto main_loop;
+      }
+      case Opcode::AllocTextureStorage: {
+        OpStartHook(instr);
+        auto size = LoadScalarInt(instr.alloc_texture_storage.allocation_size);
+        auto alignment = instr.alloc_texture_storage.alignment;
+
+        auto storage_obj = SimpleObjAllocator().make_object<StorageObj>();
+        Allocator* allocator = GetAllocator(instr.alloc_texture_storage.device_index);
+        ICHECK(allocator) << "Did you forget to init the VirtualMachine with devices?";
+        VLOG(2) << "allocating with allocation_size=" << size << ", alignment=" << alignment
+                << ", dtype_hint=" << DLDataType2String(instr.alloc_texture_storage.dtype_hint)
+                << ", device_index=" << instr.alloc_texture_storage.device_index;
+        //std::cout << "allocating with allocation_size=" << size << ", alignment=" << alignment
+        //        << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
+        //        << ", device_index=" << instr.alloc_storage.device_index
+        //        << ", ndim: " << instr.alloc_storage.ndim
+        //        << std::endl;
+
+        storage_obj->buffer = allocator->Alloc(instr.alloc_texture_storage.ndim, instr.alloc_texture_storage.shape, instr.alloc_texture_storage.dtype_hint, MemScopeToStr(instr.alloc_texture_storage.scope));
         Storage storage(storage_obj);
         WriteRegister(instr.dst, storage);
         OpStopHook();
