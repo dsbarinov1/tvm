@@ -18,7 +18,6 @@
 import os
 import numpy as np
 
-#import mxnet.gluon as gluon
 import tvm
 from tvm import relay
 from tvm.relay import testing
@@ -638,7 +637,10 @@ class ImageNetValidator(Validator):
         self.inputs = {name : image}
 
     def Validate(self, m, ref_outputs=[]):
-        tvm_output = m.get_output(0)
+        if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
+            tvm_output = m.get_outputs()[0]
+        else:
+            tvm_output = m.get_output(0)
         #import ipdb; ipdb.set_trace()
         top_categories = np.argsort(tvm_output.asnumpy()[0])
         # Report top-5 classification results
@@ -727,7 +729,7 @@ class Deeplabv3Validator(Validator):
         self.dtype = dtype
         self.inputs = {}
         for key in input_shape:
-            self.inputs[key] = np.random.normal(size=input_shape[key]).astype(self.dtype)
+            self.inputs[key] = np.random.normal(size=input_shape[key]).astype("float32")
 
         categ_url = "https://github.com/Deelvin/qualcomm/raw/avoronov/rebase_master_v2/"
         categ_fn = "deeplabv3_reference_output_{}".format(dtype)
@@ -745,10 +747,17 @@ class Deeplabv3Validator(Validator):
         if self.dtype == "float32":
             rtol=1e-3
             atol=1e-3
-        for i in range(m.get_num_outputs()):
-            tvm_output = m.get_output(i)
-            np.testing.assert_allclose(tvm_output.asnumpy(), ref_outputs[i], rtol=rtol, atol=atol)
-        print("Deeplabv3Validator pass:", "rtol", rtol, "atol",atol)
+        if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
+            outputs = m.get_outputs()
+            for i in range(len(outputs)):
+                tvm_output = outputs[i]
+                np.testing.assert_allclose(tvm_output.asnumpy(), ref_outputs[i], rtol=rtol, atol=atol)
+            print("Deeplabv3Validator pass:", "rtol", rtol, "atol",atol)
+        else:
+            for i in range(m.get_num_outputs()):
+                tvm_output = m.get_output(i)
+                np.testing.assert_allclose(tvm_output.asnumpy(), ref_outputs[i], rtol=rtol, atol=atol)
+            print("Deeplabv3Validator pass:", "rtol", rtol, "atol",atol)
 
 class Yolov3Validator(Validator):
     class BoundBox:
@@ -858,8 +867,12 @@ class Yolov3Validator(Validator):
     # load and prepare an image
     @staticmethod
     def load_image_pixels(filename, shape):
-        from keras.preprocessing.image import load_img
-        from keras.preprocessing.image import img_to_array
+        try:
+            from keras.preprocessing.image import load_img
+            from keras.preprocessing.image import img_to_array
+        except:
+            from tensorflow.keras.utils import load_img
+            from tensorflow.keras.utils import img_to_array
         # load the image to get its shape
         image = load_img(filename)
         width, height = image.size
@@ -951,11 +964,18 @@ class Yolov3Validator(Validator):
 
     def Validate(self, m, ref_outputs=[], show=False):
         # output
-        num_outputs = m.get_num_outputs()
-        outputs = []
-        for i in range(num_outputs):
-            tvm_output = m.get_output(i)
-            outputs.append(tvm_output.asnumpy())
+        if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
+            outputs = []
+            tmp = m.get_outputs()
+            for i in range(len(tmp)):
+                tvm_output = tmp[i]
+                outputs.append(tvm_output.asnumpy())
+        else:
+            num_outputs = m.get_num_outputs()
+            outputs = []
+            for i in range(num_outputs):
+                tvm_output = m.get_output(i)
+                outputs.append(tvm_output.asnumpy())
 
         # summarize the shape of the list of arrays
         print([a.shape for a in outputs])
@@ -1202,8 +1222,11 @@ class Executor(object):
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
-        mod = tvm.IRModule()
-        mod["main"] = tvm_mod
+        if isinstance(tvm_mod, tvm.IRModule):
+            mod = tvm_mod
+        else:
+            mod = tvm.IRModule()
+            mod["main"] = tvm_mod
 
         #target = tvm.target.Target(args.target, host=args.target_host)
         with tvm.transform.PassContext(opt_level=3):
@@ -1242,10 +1265,10 @@ class Executor(object):
                 vm.set_input("main", data)
         elif isinstance(input_shape, dict):
             for key in input_shape:
-                data = tvm.nd.array(np.random.normal(size=input_shape[key]).astype(dtype), ctx)
+                data = tvm.nd.array(np.random.normal(size=input_shape[key]).astype("float32"), ctx)
                 vm.set_input("main", data)
         else:
-            data = tvm.nd.array(np.random.normal(size=input_shape).astype(dtype), ctx)
+            data = tvm.nd.array(np.random.normal(size=input_shape).astype("float32"), ctx)
             vm.set_input("main", data)
 
         print("Evaluating...", flush=True)
