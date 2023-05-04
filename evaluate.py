@@ -308,20 +308,28 @@ class ModelImporter(object):
 
 
     def import_onnx_ssd_resnet34(self, target="llvm", dtype="float32"):
-        model_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/ssd/model/ssd-12.onnx"
-        filename = "ssd-12"
+        archive_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/ssd/model/ssd-12.tar.gz"
+        filename = "ssd-12.tar.gz"
         from tvm.contrib import download
         import onnx
-        download.download(model_url, filename)
-        onnx_model = onnx.load(filename)
+        import tarfile
+        download.download(archive_url, filename)
+        archive = tarfile.open(filename)
+        directory = "ssd_resnet34"
+        archive.extractall(directory)
+        archive.close()
+        directory = os.path.join(directory, "ssd-12")
+        model_file = os.path.join(directory, "ssd-12.onnx")
+        onnx_model = onnx.load(model_file)
         shape_dict = {"image": (1, 3, 1200, 1200)}
         mod, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
+        test_files_dir = os.path.join(directory, "test_data_set_0")
 
         # downcast to float16
         mod = convert_to_dtype(mod["main"], dtype)
         dtype = "float32" if dtype == "float32" else "float16"
 
-        return (mod, params, shape_dict, dtype, target)#, imagenetvalidator(shape_dict, "nhwc", preproc="keras_mobilenetv1"))
+        return (mod, params, shape_dict, dtype, target, SSDResnet34Validator(test_files_dir))
 
 
 def get_args():
@@ -962,7 +970,24 @@ class Yolov3Validator(Validator):
         self.image = image
         self.inputs = { list(input_shape.keys())[0]: image }
 
+class SSDResnet34Validator(Validator):
+    def __init__(self, test_data_dir, dtype="float32"):
+        import onnx
+        from onnx import numpy_helper
+
+        self.test_data_dir = test_data_dir
+        input_file = os.path.join(test_data_dir, "input_0.pb")
+
+        tensor = onnx.TensorProto()
+        with open(input_file, 'rb') as f:
+            tensor.ParseFromString(f.read())
+        self.inputs = { "image": numpy_helper.to_array(tensor) }
+
+        self.dtype = dtype
+
     def Validate(self, m, ref_outputs=[], show=False):
+        import onnx
+        from onnx import numpy_helper
         # output
         if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
             outputs = []
@@ -976,36 +1001,17 @@ class Yolov3Validator(Validator):
             for i in range(num_outputs):
                 tvm_output = m.get_output(i)
                 outputs.append(tvm_output.asnumpy())
+        refs = []
+        for fn in ["output_0.pb", "output_1.pb", "output_2.pb"]:
+            name = os.path.join(self.test_data_dir, fn)
+            tensor = onnx.TensorProto()
+            with open(name, 'rb') as f:
+                tensor.ParseFromString(f.read())
+            refs.append(numpy_helper.to_array(tensor))
 
-        # summarize the shape of the list of arrays
-        print([a.shape for a in outputs])
-
-        # define the anchors
-        anchors = [[116,90, 156,198, 373,326], [30,61, 62,45, 59,119], [10,13, 16,30, 33,23]]
-
-        # define the probability threshold for detected objects
-        class_threshold = 0.6
-        boxes = []
         for i in range(len(outputs)):
-            # decode the output of the network
-            boxes += Yolov3Validator.decode_netout(outputs[i][0], anchors[i], class_threshold, self.input_h, self.input_w)
-        # correct the sizes of the bounding boxes for the shape of the image
-        Yolov3Validator.correct_yolo_boxes(boxes, self.image_h, self.image_w, self.input_h, self.input_w)
-        # suppress non-maximal boxes
-        Yolov3Validator.do_nms(boxes, 0.5)
+            np.testing.assert_allclose(outputs[i], refs[i], rtol=1e-2, atol=1e-2)
 
-        # get the details of the detected objects
-        v_boxes, v_labels, v_scores = Yolov3Validator.get_boxes(boxes, self.labels, class_threshold)
-
-        # summarize what we found
-        for i in range(len(v_boxes)):
-            print(v_labels[i], v_scores[i])
-
-        assert all(["truck" in v_labels, "bicycle" in v_labels, "dog" in v_labels]), "Failed Yolov3 validation check"
-
-        if show:
-            # draw what we found
-           Yolov3Validator.draw_boxes(self.image_fn, v_boxes, v_labels, v_scores)
 
 class Executor(object):
     def __init__(self, use_tracker=False):
