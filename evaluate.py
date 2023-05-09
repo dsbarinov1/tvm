@@ -322,14 +322,45 @@ class ModelImporter(object):
         model_file = os.path.join(directory, "ssd-12.onnx")
         onnx_model = onnx.load(model_file)
         shape_dict = {"image": (1, 3, 1200, 1200)}
-        mod, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
+        mod, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
         test_files_dir = os.path.join(directory, "test_data_set_0")
 
         # downcast to float16
         mod = convert_to_dtype(mod["main"], dtype)
         dtype = "float32" if dtype == "float32" else "float16"
 
-        return (mod, params, shape_dict, dtype, target, SSDResnet34Validator(test_files_dir))
+        return (mod, params, shape_dict, dtype, target, ONNXTestSamplesValidator(test_files_dir, input_names=list(shape_dict.keys())))
+
+
+    def import_onnx_yolo_v3(self, target="llvm", dtype="float32"):
+        archive_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/yolov3/model/yolov3-12.tar.gz"
+        filename = "yolov3-12.tar.gz"
+        from tvm.contrib import download
+        import onnx
+        import tarfile
+        download.download(archive_url, filename)
+        archive = tarfile.open(filename)
+        directory = "onnx_yolov3"
+        archive.extractall(directory)
+        archive.close()
+        directory = os.path.join(directory, "yolov3-12")
+        model_file = os.path.join(directory, "yolov3-12.onnx")
+        onnx_model = onnx.load(model_file)
+        shape_dict = {
+            "input_1": (1, 3, 416, 416),
+            "image_shape": (1, 2),
+        }
+        mod, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+        test_files_dir = os.path.join(directory, "test_data_set_0")
+
+        # downcast to float16
+        mod = convert_to_dtype(mod["main"], dtype)
+        dtype = "float32" if dtype == "float32" else "float16"
+        print("=" * 10)
+        print(mod)
+        print("=" * 10)
+
+        return (mod, params, shape_dict, dtype, target, ONNXTestSamplesValidator(test_files_dir, input_names=list(shape_dict.keys())))
 
 
 def get_args():
@@ -970,23 +1001,26 @@ class Yolov3Validator(Validator):
         self.image = image
         self.inputs = { list(input_shape.keys())[0]: image }
 
-class SSDResnet34Validator(Validator):
-    def __init__(self, test_data_dir, dtype="float32"):
+class ONNXTestSamplesValidator(Validator):
+    def __init__(self, test_data_dir, input_names, dtype="float32"):
         import onnx
+        import glob
         from onnx import numpy_helper
 
         self.test_data_dir = test_data_dir
-        input_file = os.path.join(test_data_dir, "input_0.pb")
-
-        tensor = onnx.TensorProto()
-        with open(input_file, 'rb') as f:
-            tensor.ParseFromString(f.read())
-        self.inputs = { "image": numpy_helper.to_array(tensor) }
-
-        self.dtype = dtype
+        inputs_num = len(glob.glob(os.path.join(test_data_dir, 'input_*.pb')))
+        self.inputs = {}
+        for i in range(inputs_num):
+            input_file = os.path.join(test_data_dir, 'input_{}.pb'.format(i))
+            tensor = onnx.TensorProto()
+            with open(input_file, 'rb') as f:
+                tensor.ParseFromString(f.read())
+            inp = numpy_helper.to_array(tensor)
+            self.inputs[input_names[i]] = inp
 
     def Validate(self, m, ref_outputs=[], show=False):
         import onnx
+        import glob
         from onnx import numpy_helper
         # output
         if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
@@ -1002,10 +1036,12 @@ class SSDResnet34Validator(Validator):
                 tvm_output = m.get_output(i)
                 outputs.append(tvm_output.asnumpy())
         refs = []
-        for fn in ["output_0.pb", "output_1.pb", "output_2.pb"]:
-            name = os.path.join(self.test_data_dir, fn)
+        inputs_num = len(glob.glob(os.path.join(self.test_data_dir, 'output_*.pb')))
+        self.inputs = {}
+        for i in range(inputs_num):
+            input_file = os.path.join(self.test_data_dir, 'output_{}.pb'.format(i))
             tensor = onnx.TensorProto()
-            with open(name, 'rb') as f:
+            with open(input_file, 'rb') as f:
                 tensor.ParseFromString(f.read())
             refs.append(numpy_helper.to_array(tensor))
 
@@ -1266,13 +1302,15 @@ class Executor(object):
         inputs = []
         if isinstance(validator, Validator):
             inputs = validator.GetInputDictionary()
-            for key in inputs:
-                data = tvm.nd.array(inputs[key], ctx)
-                vm.set_input("main", data)
+            data = {}
+            for k, v in inputs.items():
+                data[k] = tvm.nd.array(v, ctx)
+            vm.set_input("main", **data)
         elif isinstance(input_shape, dict):
+            data = {}
             for key in input_shape:
-                data = tvm.nd.array(np.random.normal(size=input_shape[key]).astype("float32"), ctx)
-                vm.set_input("main", data)
+                data[key] = tvm.nd.array(np.random.normal(size=input_shape[key]).astype("float32"), ctx)
+            vm.set_input("main", **data)
         else:
             data = tvm.nd.array(np.random.normal(size=input_shape).astype("float32"), ctx)
             vm.set_input("main", data)

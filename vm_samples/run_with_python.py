@@ -26,8 +26,11 @@ else:
 
 def get_model():
     dtype = "float32"
-    input_name = "data"
     input_shape = (relay.Any(), 3, 224, 224)
+    shape_dict = {
+        "data": (1, 3, 224, 224),
+        "weight": (64, 3, 7, 7),
+    }
     filter_shape = (64, 3, 7, 7)
     A = relay.var("data", shape=input_shape, dtype=dtype)
     B = relay.var("weight", shape=filter_shape, dtype=dtype)
@@ -46,20 +49,21 @@ def get_model():
 
     mod = relay.Function([A, B], D)
     np.random.seed(0)
-    filter_data = np.zeros(filter_shape).astype(dtype)
+    #filter_data = np.zeros(filter_shape).astype(dtype)
     params1 = {
-        "weight": tvm.nd.array(filter_data),
+        #"weight": tvm.nd.array(filter_data),
     }
     module = tvm.IRModule({})
     module["main"] = mod
-    input_shape = (1, 3, 224, 224)
-    return module, params1, input_name, input_shape
+    return module, params1, shape_dict
 
 
 def get_ssd_model():
     dtype = "float32"
-    input_name = "data"
     input_shape = (1, 3, 1200, 1200)
+    shape_dict = {
+        "data": (1, 3, 1200, 1200)
+    }
     filter_shape = (64, 3, 7, 7)
     filter_shape2 = (64, 64, 3, 3)
     A = relay.var("data", shape=input_shape, dtype=dtype)
@@ -110,7 +114,7 @@ def get_ssd_model():
     }
     module = tvm.IRModule({})
     module["main"] = mod
-    return module, params1, input_name, input_shape
+    return module, params1, shape_dict
 
 
 def download_resnet_model():
@@ -127,17 +131,14 @@ def get_resnet_model():
     model_file = download_resnet_model()
     print("Import model...")
     onnx_model = onnx.load(model_file)
-    input_name = "data"
-    input_shape = (1, 3, 224, 224)
-    #shape_dict = {
-    #    input_name: [*input_shape]
-    #}
-    #model, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+    shape_dict = {
+        "data": (1, 3, 224, 224)
+    }
     model, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
     print("=" * 10)
     print(model)
     print("=" * 10)
-    return model, params, input_name, input_shape
+    return model, params, shape_dict
 
 
 def download_resnet_ssd_model():
@@ -154,17 +155,39 @@ def get_resnet_ssd_model():
     model_file = download_resnet_ssd_model()
     print("Import model...")
     onnx_model = onnx.load(model_file)
-    input_name = "image"
-    input_shape = (1, 3, 1200, 1200)
-    #shape_dict = {
-    #    input_name: [*input_shape]
-    #}
-    #model, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+    shape_dict = {
+        "image": (1, 3, 1200, 1200)
+    }
     model, params = relay.frontend.from_onnx(onnx_model, freeze_params=True)
     print("=" * 10)
     print(model)
     print("=" * 10)
-    return model, params, input_name, input_shape
+    return model, params, shape_dict
+
+
+def download_onnx_yolo_model():
+    print("Download model...")
+    model_file = "onnx_yolov3.onnx"
+    model_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/yolov3/model/yolov3-12.onnx"
+    if not os.path.exists(model_file):
+        import urllib.request
+        urllib.request.urlretrieve(model_url, model_file)
+    return model_file
+
+
+def get_onnx_yolo_model():
+    model_file = download_onnx_yolo_model()
+    print("Import model...")
+    onnx_model = onnx.load(model_file)
+    shape_dict = {
+        "input_1": (1, 3, 416, 416),
+        "image_shape": (1, 2),
+    }
+    model, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+    print("=" * 10)
+    print(model)
+    print("=" * 10)
+    return model, params, shape_dict
 
 
 def compile_model_for_vm(name, model, params, target):
@@ -208,13 +231,14 @@ def run_model_with_vm(input_dict, lib_name):
     rlib = remote.load_module(lib_name)
     dev = remote.cl()
     vm = VirtualMachine(rlib, dev, "naive")
-    data = tvm.nd.array(list(input_dict.values())[0], dev)
-    vm.set_input("main", data)
+    data = {}
+    for k, v in input_dict.items():
+        data[k] = tvm.nd.array(v, dev)
+    vm.set_input("main", **data)
     #return vm.run()
     vm.invoke_stateful("main")
     outputs = vm.get_outputs()
     return outputs
-
 
 
 def run_model_with_ge(input_dict, lib_name):
@@ -240,15 +264,19 @@ def run_model_with_ge(input_dict, lib_name):
 if __name__ == '__main__':
     target = Target(target_c, host=target_h)
     #name = "resnet_vm_model"
-    #model, params, input_name, input_shape = get_resnet_model()
-    #name = "my_conv2d"
-    #model, params, input_name, input_shape = get_model()
-    name = "resnet_ssd_vm_model"
-    model, params, input_name, input_shape = get_resnet_ssd_model()
+    #model, params, shape_dict = get_resnet_model()
+    name = "my_conv2d"
+    model, params, shape_dict = get_model()
+    #name = "resnet_ssd_vm_model"
+    #model, params, shape_dict = get_resnet_ssd_model()
     #name = "my_ssd_vm_model"
-    #model, params, input_name, input_shape = get_ssd_model()
-    img = np.random.rand(*input_shape).astype("float32")
-    input_dict = {input_name: img}
+    #model, params, shape_dict = get_ssd_model()
+    #name = "onnx_yolo_vm_model"
+    #model, params, shape_dict = get_onnx_yolo_model()
+    input_dict = {}
+    for k, v in shape_dict.items():
+        img = np.random.rand(*v).astype("float32")
+        input_dict[k] = img
     if USE_VM:
         _, lib_name = compile_model_for_vm(name, model, params, target)
         tvm_res = run_model_with_vm(input_dict, lib_name)
