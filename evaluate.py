@@ -363,6 +363,42 @@ class ModelImporter(object):
         return (mod, params, shape_dict, dtype, target, ONNXTestSamplesValidator(test_files_dir, input_names=list(shape_dict.keys())))
 
 
+    def import_onnx_faster_rcnn(self, target="llvm", dtype="float32"):
+        archive_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/faster-rcnn/model/FasterRCNN-12.onnx"
+        filename = "FasterRCNN-12"
+        from tvm.contrib import download
+        import onnx
+        download.download(archive_url, filename)
+        onnx_model = onnx.load(filename)
+        shape_dict = {
+            "image": (3, 800, 800),
+        }
+        mod_file = "onnx_faster_rcnn_mod.json"
+        params_file = "onnx_faster_rcnn_params.json"
+        if not os.path.exists(mod_file):
+            mod, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+
+            # downcast to float16
+            mod = convert_to_dtype(mod["main"], dtype)
+            with open(mod_file, "w") as file:
+                file.write(tvm.ir.save_json(mod))
+
+            with open(params_file, "wb") as file:
+                file.write(relay.save_param_dict(params))
+        else:
+            with open(mod_file, "r") as file:
+                mod = tvm.ir.load_json(file.read())
+
+            with open(params_file, "rb") as file:
+                params = relay.load_param_dict(file.read())
+        dtype = "float32" if dtype == "float32" else "float16"
+        print("=" * 10)
+        print(mod)
+        print("=" * 10)
+
+        return (mod, params, shape_dict, dtype, target)
+
+
 def get_args():
     import argparse
 
