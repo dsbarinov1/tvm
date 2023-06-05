@@ -13,7 +13,7 @@ from tvm.target import Target
 
 
 USE_VM = True
-RUN_ON_HOST = False
+RUN_ON_HOST = True
 
 rpc_key = "android"
 target_c = "opencl -device=adreno"
@@ -117,10 +117,8 @@ def get_ssd_model():
     return module, params1, shape_dict
 
 
-def download_resnet_model():
+def download_model(model_url, model_file):
     print("Download model...")
-    model_file = "resnet50-v2-7.onnx"
-    model_url = "https://github.com/onnx/models/raw/main/vision/classification/resnet/model/resnet50-v2-7.onnx"
     if not os.path.exists(model_file):
         import urllib.request
         urllib.request.urlretrieve(model_url, model_file)
@@ -128,7 +126,7 @@ def download_resnet_model():
 
 
 def get_resnet_model():
-    model_file = download_resnet_model()
+    model_file = download_model("https://github.com/onnx/models/raw/main/vision/classification/resnet/model/resnet50-v2-7.onnx", "resnet50-v2-7.onnx")
     print("Import model...")
     onnx_model = onnx.load(model_file)
     shape_dict = {
@@ -141,18 +139,8 @@ def get_resnet_model():
     return model, params, shape_dict
 
 
-def download_resnet_ssd_model():
-    print("Download model...")
-    model_file = "resnet-ssd.onnx"
-    model_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/ssd/model/ssd-12.onnx"
-    if not os.path.exists(model_file):
-        import urllib.request
-        urllib.request.urlretrieve(model_url, model_file)
-    return model_file
-
-
 def get_resnet_ssd_model():
-    model_file = download_resnet_ssd_model()
+    model_file = download_model("https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/ssd/model/ssd-12.onnx", "resnet-ssd.onnx")
     print("Import model...")
     onnx_model = onnx.load(model_file)
     shape_dict = {
@@ -165,23 +153,27 @@ def get_resnet_ssd_model():
     return model, params, shape_dict
 
 
-def download_onnx_yolo_model():
-    print("Download model...")
-    model_file = "onnx_yolov3.onnx"
-    model_url = "https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/yolov3/model/yolov3-12.onnx"
-    if not os.path.exists(model_file):
-        import urllib.request
-        urllib.request.urlretrieve(model_url, model_file)
-    return model_file
-
-
 def get_onnx_yolo_model():
-    model_file = download_onnx_yolo_model()
+    model_file = download_model("https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/yolov3/model/yolov3-12.onnx", "onnx_yolov3.onnx")
     print("Import model...")
     onnx_model = onnx.load(model_file)
     shape_dict = {
         "input_1": (1, 3, 416, 416),
         "image_shape": (1, 2),
+    }
+    model, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
+    print("=" * 10)
+    print(model)
+    print("=" * 10)
+    return model, params, shape_dict
+
+
+def get_onnx_faster_rcnn_model():
+    model_file = download_model("https://github.com/onnx/models/raw/main/vision/object_detection_segmentation/faster-rcnn/model/FasterRCNN-12.onnx", "FasterRCNN.onnx")
+    print("Import model...")
+    onnx_model = onnx.load(model_file)
+    shape_dict = {
+        "image": (3, 800, 800),
     }
     model, params = relay.frontend.from_onnx(onnx_model, shape_dict, freeze_params=True)
     print("=" * 10)
@@ -265,14 +257,16 @@ if __name__ == '__main__':
     target = Target(target_c, host=target_h)
     #name = "resnet_vm_model"
     #model, params, shape_dict = get_resnet_model()
-    name = "my_conv2d"
-    model, params, shape_dict = get_model()
+    #name = "my_conv2d"
+    #model, params, shape_dict = get_model()
     #name = "resnet_ssd_vm_model"
     #model, params, shape_dict = get_resnet_ssd_model()
     #name = "my_ssd_vm_model"
     #model, params, shape_dict = get_ssd_model()
     #name = "onnx_yolo_vm_model"
     #model, params, shape_dict = get_onnx_yolo_model()
+    name = "onnx_faster_rcnn_model"
+    model, params, shape_dict = get_onnx_faster_rcnn_model()
     input_dict = {}
     for k, v in shape_dict.items():
         img = np.random.rand(*v).astype("float32")
