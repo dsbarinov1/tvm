@@ -43,7 +43,9 @@ struct Buffer {
   void* data{nullptr};
   /*! \brief The size of the block. */
   size_t size{0};
-  int ndims {1};
+  /*! \brief The tensor rank. */
+  int ndims{1};
+  /*! \brief The shape of the tensor. */
   int64_t* shape{nullptr};
   /*! \brief The context of the allocated buffers. */
   Device device;
@@ -74,7 +76,8 @@ class Allocator {
    *  \return A sized allocation in the form of a buffer.
    */
   virtual Buffer Alloc(size_t nbytes, size_t alignment, DLDataType type_hint) = 0;
-  virtual Buffer Alloc(int ndims, int64_t* shape, DLDataType type_hint, const std::string& mem_scope) = 0;
+  virtual Buffer Alloc(int ndims, int64_t* shape, DLDataType type_hint,
+                       const std::string& mem_scope) = 0;
   /*! \brief Free a buffer allocated by the allocator.
    *  \param buffer The buffer to free.
    */
@@ -85,7 +88,8 @@ class Allocator {
   virtual size_t UsedMemory() const = 0;
 
  protected:
-  virtual Buffer Alloc(Device dev, int ndims, int64_t* shape, DLDataType type_hint, const std::string& mem_scope);
+  virtual Buffer Alloc(Device dev, int ndims, int64_t* shape, DLDataType type_hint,
+                       const std::string& mem_scope);
 
  private:
   AllocatorType type_;
