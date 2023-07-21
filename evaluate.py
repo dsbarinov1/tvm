@@ -24,6 +24,7 @@ from tvm.relay import testing
 from tvm import autotvm
 from tvm.contrib import utils, ndk
 from tvm.topi import testing
+from tvm.runtime import profiler_vm
 
 from tvm.relay.op import register_mixed_precision_conversion
 
@@ -459,6 +460,11 @@ def get_args():
         action="store_true",
         help="Use graph runtime debugger to output per layer perf. data and other statistics",
     )
+    parser.add_argument(
+        "--VM",
+        action="store_true",
+        help="Use VM compiling and benchmarking",
+    )
 
     args = parser.parse_args()
     if args.rpc_tracker_port != None:
@@ -711,13 +717,13 @@ class ImageNetValidator(Validator):
 
         self.inputs = {name : image}
 
-    def Validate(self, m, ref_outputs=[]):
+    def Validate(self, m, ref_outputs=[], data=[]):
         if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
-            tvm_output = m.get_outputs()[0]
+            tvm_output = m.invoke("main", **data)
         else:
             tvm_output = m.get_output(0)
         #import ipdb; ipdb.set_trace()
-        top_categories = np.argsort(tvm_output.asnumpy()[0])
+        top_categories = np.argsort(tvm_output.asnumpy()[0])  # TODO: top_categories = np.argsort(tvm_output.asnumpy()[0]) AttributeError: 'NoneType' object has no attribute 'asnumpy'
         # Report top-5 classification results
         print("\nTop5 predictions: \n")
         top5 = np.flip(top_categories, axis=0)[:5]
@@ -1203,7 +1209,8 @@ class Executor(object):
             from tvm.contrib.debugger import debug_runtime as graph_executor
         else:
             from tvm.contrib import graph_executor
-
+        
+        print("Benchmark GraphExecutor")
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
@@ -1291,12 +1298,8 @@ class Executor(object):
         dtype="float32",
         validator=None
     ):
-        #if args.debug:
-        #    from tvm.contrib.debugger import debug_runtime as graph_executor
-        #else:
-        #    from tvm.contrib import graph_executor
         from tvm.runtime.vm import VirtualMachine
-
+        print("Benchmark GraphExecutor")
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
@@ -1306,7 +1309,6 @@ class Executor(object):
             mod = tvm.IRModule()
             mod["main"] = tvm_mod
 
-        #target = tvm.target.Target(args.target, host=args.target_host)
         with tvm.transform.PassContext(opt_level=3):
             vmc = relay.vm.compile(mod, target_host=target_host, target=target, params=params)
 
@@ -1334,7 +1336,6 @@ class Executor(object):
                 vm = tvm.runtime.profiler_vm.VirtualMachineProfiler(vmc, ctx, "naive")
             else:
                 vm = VirtualMachine(vmc, ctx, "naive")
-
         inputs = []
         if isinstance(validator, Validator):
             inputs = validator.GetInputDictionary()
@@ -1350,8 +1351,12 @@ class Executor(object):
         else:
             data = tvm.nd.array(np.random.normal(size=input_shape).astype("float32"), ctx)
             vm.set_input("main", data)
-
+        
         print("Evaluating...", flush=True)
+        if args.debug:
+            res = vm.profile(**data, func_name="main")
+            print(res)
+        
         number = 1
         repeat = 100
         min_repeat_ms = 0
@@ -1367,7 +1372,7 @@ class Executor(object):
         if validator:
             if isinstance(validator, Validator):
                 ref_outputs = validator.GetReference()
-                validator.Validate(vm, ref_outputs)
+                validator.Validate(vm, ref_outputs, data)
             else:
                 ref_outputs = validator(inputs)
                 for i, ref_output in enumerate(ref_outputs):
@@ -1378,17 +1383,29 @@ class Executor(object):
 
 
     def _schedule_jobs(self, mod, params, input_shape, dtype, target, validator=None):
-        def bench():
-            #self._benchmark(
-            self._benchmark_vm(
-                mod,
-                params,
-                input_shape,
-                target=target,
-                target_host=self.host_target,
-                dtype=dtype,
-                validator=validator
-            )
+        if args.VM:
+            def bench():
+                self._benchmark_vm(
+                    mod,
+                    params,
+                    input_shape,
+                    target=target,
+                    target_host=self.host_target,
+                    dtype=dtype,
+                    validator=validator
+                )
+        else:
+            def bench():
+                self._benchmark(
+                    mod,
+                    params,
+                    input_shape,
+                    target=target,
+                    target_host=self.host_target,
+                    dtype=dtype,
+                    validator=validator
+                )
+        
 
         benchmark_index = len(self.benchmarks)
         self.benchmarks.append(bench)
