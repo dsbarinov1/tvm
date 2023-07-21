@@ -24,7 +24,6 @@ from tvm.relay import testing
 from tvm import autotvm
 from tvm.contrib import utils, ndk
 from tvm.topi import testing
-from tvm.runtime import profiler_vm
 
 from tvm.relay.op import register_mixed_precision_conversion
 
@@ -739,7 +738,7 @@ class ImageNetValidator(Validator):
 
         self.inputs = {name : image}
 
-    def Validate(self, m, ref_outputs=[]):
+    def Validate(self, m, ref_outputs=[], data={}):
         if isinstance(m, tvm.runtime.vm.VirtualMachine) or isinstance(m, tvm.runtime.profiler_vm.VirtualMachineProfiler):
             tvm_output = m.invoke("main", **data)
         else:
@@ -1464,7 +1463,6 @@ class Executor(object):
         else:
             from tvm.contrib import graph_executor
         
-        print("Benchmark GraphExecutor")
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
@@ -1553,7 +1551,7 @@ class Executor(object):
         validator=None
     ):
         from tvm.runtime.vm import VirtualMachine
-        print("Benchmark Virtual Machine")
+        from tvm.runtime import profiler_vm
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
