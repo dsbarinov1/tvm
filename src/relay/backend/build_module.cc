@@ -337,7 +337,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     if (config_->optional_homogeneous_target.defined()) {
       // This pass currently only supports the homogeneous case.
       pass_seqs.push_back(transform::SplitArgs(
-          config_->optional_homogeneous_target->GetAttr<Integer>("max_function_args", -1)
+          config_->optional_homogeneous_target->GetAttr<Integer>("max_function_args", 0)
               .value()
               .IntValue()));
     }
@@ -417,6 +417,7 @@ class RelayBuildModule : public runtime::ModuleNode {
     IRModule module = WithAttrs(
         relay_module, {{tvm::attr::kExecutor, executor_}, {tvm::attr::kRuntime, runtime_}});
     relay_module = OptimizeImpl(std::move(module));
+    //std::cout << " >>>> Relay module: \n" << PrettyPrint(relay_module) << "\n\n" << std::endl;
 
     // Get the updated function and new IRModule to build.
     // Instead of recreating the IRModule, we should look at the differences between this and the

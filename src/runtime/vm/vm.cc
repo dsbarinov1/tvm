@@ -94,6 +94,34 @@ inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev) {
   }
 }
 
+inline ObjectRef CopyTo(ObjectRef src, const DLDevice& dev, String mem_scope) {
+  if (src->IsInstance<NDArray::ContainerType>()) {
+    auto nd_array = Downcast<NDArray>(src);
+    // TODO(mbs): Should respect device id also.
+    // TODO(vvchernov): it still does not work for different device id
+    // due to simple implementation of Get() and AllocDataSpace() methods
+    // see tvm/src/runtime/c_runtime_api.cc: L139
+    // tvm/src/runtime/cpu_device_api.cc: L47
+    if (nd_array->device.device_type != dev.device_type ||
+        nd_array->device.device_id != dev.device_id) {
+      VLOG(2) << "copying from " << nd_array->device.device_type << "["
+              << nd_array->device.device_id << "] to " << dev.device_type << "[" << dev.device_id
+              << "]";
+      return nd_array.CopyTo(dev, mem_scope);
+    }
+    return src;
+  } else {
+    ICHECK(src->IsInstance<ADTObj>())
+        << "VM data must be NDArray or a list of NDArray, but received: " << src->_type_key;
+    std::vector<ObjectRef> ret;
+    ADT adt = Downcast<ADT>(src);
+    for (size_t i = 0; i < adt.size(); i++) {
+      ret.push_back(CopyTo(adt[i], dev));
+    }
+    return ADT(adt->tag, ret.begin(), ret.end());
+  }
+}
+
 std::vector<int64_t> ToShape(NDArray shape_tensor) {
   std::vector<int64_t> shape;
   auto rank = shape_tensor.Shape().size();
@@ -532,7 +560,7 @@ void VirtualMachine::Init(const std::vector<Device>& physical_devices,
   for (size_t device_index = 0; device_index < num_virtual_devices; ++device_index) {
     // We'll retain the legacy behaviour and just match by device type.
     // TODO(mbs): Generalize.
-    DLDeviceType virtual_device_type = exec_->virtual_devices[device_index].device_type;
+    DLDeviceType virtual_device_type = exec_->virtual_devices[device_index].first.device_type;
     auto itr = std::find_if(physical_devices.begin(), physical_devices.end(),
                             [virtual_device_type](const Device& physical_device) {
                               return physical_device.device_type == virtual_device_type;
@@ -658,8 +686,8 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         }
 
         if (!const_pool_[instr.const_index].defined()) {
-          Device dev = GetDevice(exec_->const_device_indexes[instr.const_index]);
-          const_pool_[instr.const_index] = CopyTo(constant_obj, dev);
+          auto& [dev, mem_scope] = exec_->virtual_devices[exec_->const_device_indexes[instr.const_index]];
+          const_pool_[instr.const_index] = CopyTo(constant_obj, dev, mem_scope);
         }
         WriteRegister(instr.dst, const_pool_[instr.const_index]);
         if (is_not_cached) {
@@ -828,8 +856,9 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         VLOG(2) << "allocating with allocation_size=" << size << ", alignment=" << alignment
                 << ", dtype_hint=" << DLDataType2String(instr.alloc_storage.dtype_hint)
                 << ", device_index=" << instr.alloc_storage.device_index;
+        std::string mem_scope = exec_->virtual_devices[instr.alloc_storage.device_index].second;
 
-        storage_obj->buffer = allocator->Alloc(size, alignment, instr.alloc_storage.dtype_hint);
+        storage_obj->buffer = allocator->Alloc(instr.alloc_storage.ndim, instr.alloc_storage.shape, instr.alloc_storage.dtype_hint, mem_scope);
         Storage storage(storage_obj);
         WriteRegister(instr.dst, storage);
         OpStopHook();
@@ -899,8 +928,9 @@ void VirtualMachine::RunLoop(const std::vector<Index>& output_tensor_reg_indices
         ICHECK_EQ(actual_src_dev.device_type, inst_src_dev.device_type);
         ICHECK_EQ(actual_src_dev.device_id, inst_src_dev.device_id);
         Device dst_dev = GetDevice(instr.device_copy.dst_device_index);
+        auto mem_scope = exec_->virtual_devices[instr.device_copy.dst_device_index].second;
 
-        NDArray dst_data = src_data.CopyTo(dst_dev);
+        NDArray dst_data = src_data.CopyTo(dst_dev, mem_scope);
         WriteRegister(instr.dst, dst_data);
         OpStopHook();
         pc_++;

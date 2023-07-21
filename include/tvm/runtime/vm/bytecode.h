@@ -157,6 +157,8 @@ struct Instruction {
     struct /* LoadConst Operands */ {
       /* \brief The index into the constant pool. */
       Index const_index;
+      /*! \brief The index of the device on which the load will be made. */
+      Index device_index;
     };
     struct /* LoadConsti Operands */ {
       /* \brief The index into the constant pool. */
@@ -201,6 +203,10 @@ struct Instruction {
       Index alignment;
       /*! \brief The hint of the dtype. */
       DLDataType dtype_hint;
+      /*! \brief The number of dimensions. */
+      uint32_t ndim;
+      /*! \brief The shape of tensor. */
+      int64_t* shape;
       /*! \brief The index of the device on which the allocation will be made. */
       Index device_index;
     } alloc_storage;
@@ -335,7 +341,7 @@ struct Instruction {
    * \param dst The destination register.
    * \return The load constant instruction.
    */
-  static Instruction LoadConst(Index const_index, RegName dst);
+  static Instruction LoadConst(Index const_index, Index device_index, RegName dst);
   /*!
    * \brief Construct a load_constanti instruction.
    * \param val The interger constant value.
@@ -360,7 +366,7 @@ struct Instruction {
    * \return The alloc storage instruction.
    */
   static Instruction AllocStorage(RegName size, Index alignment, DLDataType dtype_hint,
-                                  Index device_index, RegName dst);
+                                  Index device_index, const std::vector<int64_t>& shape, RegName dst);
   /*!
    * \brief Get the shape of an input tensor.
    * \param tensor The input tensor.

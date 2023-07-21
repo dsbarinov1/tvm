@@ -1462,7 +1462,7 @@ class Executor(object):
             from tvm.contrib.debugger import debug_runtime as graph_executor
         else:
             from tvm.contrib import graph_executor
-        
+
         if self.use_tracker and self.remote == None:
             self._connect_tracker()
 
